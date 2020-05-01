@@ -38,7 +38,7 @@ class FAE():
 
 		# Hidden Variable
 		U_input = Input(shape=(self.dim,  self.channels), name='U')	
-		V_input = Input(shape=(self.dim,  self.channels), name='C')		
+		V_input = Input(shape=(self.dim,  self.channels), name='V')		
 
 		# Constant 
 		F0 = Input(shape=(self.dim,  self.channels), name='F0')
@@ -69,10 +69,10 @@ class FAE():
 		# The combined model (conect encoder and decoder)
 		self.autoencoder = Model(inputs=[L_input,C_input, U_input, V_input,F0], outputs=[Lt, Ct]) # p1, p2, lam,
 		self.autoencoder.compile(optimizer = self.optimizer,
-		loss={'model_1': 'mean_squared_error', 
-		'model_2': 'mean_squared_error'},
-		loss_weights={'model_1': 1, 
-		'model_2': 1})
+		loss={'model_2': 'mean_squared_error', 
+		'model_3': 'mean_squared_error'},
+		loss_weights={'model_2': 1, 
+		'model_3': 1})
 		self.autoencoder.summary()
 
 		# # Build the generator
