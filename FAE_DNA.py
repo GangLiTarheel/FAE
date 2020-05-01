@@ -4,7 +4,7 @@ from keras import backend as K
 import tensorflow as tf
 import numpy as np
 
-from keras.layers import Input, Dense, Lambda, Concatenate, Reshape
+from keras.layers import Input, Dense, Lambda, Concatenate, Reshape, RepeatVector
 from keras.models import Model, Sequential
 from keras.models import model_from_json
 
@@ -39,6 +39,10 @@ class FAE():
 		# Hidden Variable
 		U_input = Input(shape=(self.dim,  self.channels), name='U')	
 		V_input = Input(shape=(self.dim,  self.channels), name='C')		
+
+		# Constant 
+		F0 = Input(shape=(self.dim,  self.channels), name='F0')
+		
 			
 		# Build encoder
 		self.encoder = self.build_encoder()
@@ -56,14 +60,14 @@ class FAE():
 		#self.decoder.trainable = False
 		#x_hat = self.decoder([mu, z_input])
 		#decoder1 = Model(inputs=[p1,p2, U_input,V_input], outputs=Lt)
-		Lt = self.decoder1([p1,p2, U_input])
+		Lt = self.decoder1([F0, p1,p2, U_input])
 
 		# Build decoder2
 		self.decoder2 = self.build_decoder2()
-		Ct = self.decoder2([lam,L_input,V_input])
+		Ct = self.decoder2([lam,Lt,V_input])
 		
 		# The combined model (conect encoder and decoder)
-		self.autoencoder = Model(inputs=[x_input,z_input], outputs=[x_hat,mu])
+		self.autoencoder = Model(inputs=[L_input,C_input, U_input, V_input,F0], outputs=[Lt, Ct]) # p1, p2, lam,
 		self.autoencoder.compile(optimizer = self.optimizer,
 		loss={'model_1': 'mean_squared_error', 
 		'model_2': 'mean_squared_error'},
@@ -101,7 +105,7 @@ class FAE():
 
 		# "encoded" is the encoded representation of the input
 		encoded=keras.layers.concatenate([L_input,C_input, U_input, V_input])
-		#encoded = Dense(32, activation='relu')(x_input)
+		encoded = Dense(32, activation='relu')(encoded)
 		encoded = Dense(64, activation='relu')(encoded)
 		encoded = Dense(128, activation='relu')(encoded)
 		encoded = Dense(512, activation='relu')(encoded)
@@ -171,35 +175,42 @@ class FAE():
 		# Ft with self.T
 		# Note: invert step CDF
 		batch_size = tf.shape(U_input)[0]
-		Ft = tf.ones([batch_size, self.dim,self.channels])
+		#Ft = tf.ones([batch_size, self.dim,self.channels])
+		F0 = Input(shape = (self.dim,self.channels),name='F0')
+		Ft = F0
 		def CDF(ip):
 			F00 = ip[0]
 			tp1 = ip[1]
 			tp2 = ip[2]
 			tp3 = ip[3]
-			#one=K.constant(value=1)
-			#zero=K.constant(value=0)
 			batch_size = tf.shape(F00)[0]
-			#padding_tensor = tf.ones([batch_size, 1])
-			t = K.concatenate(tensors=[tf.zeros([batch_size, self.dim, self.channels]),F00,tf.ones([batch_size, self.dim, self.channels])], axis=-1)*p3 + K.concatenate(tensors=[F00,tf.ones([batch_size, self.dim, self.channels]),tf.ones([batch_size,self.dim, self.channels])], axis=-1)*p1 + K.concatenate(tensors=[tf.zeros([batch_size, self.dim,self.channels]),tf.zeros([batch_size, self.dim,self.channels]),F00], axis=-1)*p2
+			t = K.concatenate(tensors=[tf.zeros([batch_size, self.dim, self.channels]),F00,tf.ones([batch_size, self.dim, self.channels])], axis=-1)*p3 
 			return t
 		#	
 		for i in range(self.T):
 			Ft = keras.layers.Lambda(CDF)([Ft,p1,p2,p3])
 		
-		#u_np = K.constant(np.random.uniform(0,1,batch_size))
-		#U = K.repeat_elements(u_np,rep=2*T+1, axis=0)
-		U = K.repeat_elements(U_input,rep=2*self.T+1, axis=0)
-		U = K.reshape(U, shape=(self.dim, 2*self.T+1, self.channels))#, input_shape=(batch_size*(2*T+1),))(U)
+		#U = RepeatVector(2*self.T+1)([U_input])
+		def repeat(u_np):
+			tU = K.repeat_elements(u_np,rep=2*self.T+1, axis=2)
+			return tU
+		
+		U = keras.layers.Lambda(repeat)(U_input)
 
 
-		tt=(K.sign(U-Ft)+tf.ones([batch_size, 2*T+1, self.channels]))/2
-		tt=K.sum(tt,axis=1)
-		tt=K.constant(3)
-		L0=K.constant(60) # initial length of sequence
-		b0=K.constant(5) # number of blocks (tandems)
-		Lt = tt*b0+L0
+		def dgm_Lt(ip):             
+			tU = ip[0]
+			tFt = ip[1]
+			tt=(K.sign(tU-tFt)+K.ones([self.dim, 2*self.T+1]))/2
+			tt=K.sum(tt,axis=2)
+			L0=K.constant(60) # initial length of sequence
+			b0=K.constant(5) # number of blocks (tandems)
+			tLt = b0 * tt + L0
+			return tLt
 
+		Lt = keras.layers.Lambda(dgm_Lt)([U,Ft])
+		Lt = Reshape((self.dim, self.channels))(Lt)
+		
 		# def dg(ip):
 		# 	mu1 = ip[0]
 		# 	z2 = ip[1]
@@ -208,43 +219,37 @@ class FAE():
 			
 		# x_hat = keras.layers.Lambda(dg)([mu,z_input])
 				
-		decoder1 = Model(inputs=[p1,p2, U_input], outputs=Lt)
+		decoder1 = Model(inputs=[F0,p1,p2, U_input], outputs=[Lt])
 		
 		decoder1.summary()
 		
-		# model = Sequential()
-
-		# model.add(Dense(128 * 7 * 7, activation="relu", input_dim=self.latent_dim))
-
-		# model.summary()
-
-		# noise = Input(shape=(self.latent_dim,))
-		# img = model(noise)
 
 		return decoder1
 
 	def build_decoder2(self):
 		# this is our input placeholder
 		# Parameters
-		# p1 = Input(shape = (1,  self.channels),name='p1')
-		# p2 = Input(shape = (1,  self.channels),name='p2')
 		lam = Input(shape = (1,  self.channels),name='lam')
+		Lt = Input(shape=(self.dim,  self.channels), name='Lt')	
 
 		# Hidden Variable
-		# U_input = Input(shape=(self.dim,  self.channels), name='U')	
 		V_input = Input(shape=(self.dim,  self.channels), name='V')	
 
 		# Constant variables
 		L0=K.constant(self.L0) # initial length of sequence
-    	# b0=K.constant(self.b0) # number of blocks (tandems)
 
 		## Ct hat
-		lam = K.constant(np.random.uniform(0,0.005,batch_size))#0.005 
 
-		lamt = lam*(L0+Lt)/2
-		lamt = K.mean(lamt)
+		
+		def lam_para(tLt):
+			tlamt = lam*(L0+tLt)/2
+			#tlamt = K.mean(tlamt)
+			return tlamt
+		lamt = keras.layers.Lambda(lam_para)(Lt)
+
+
 		#samples = tf.random.poisson(lamt,[1])#[0.5, 1.5, 2.5], [1])
-		test = tf.math.igammac(K.constant([1,2,3]),lamt) # k+1, lambda
+		#test = tf.math.igammac(K.constant([1,2,3]),lamt) # k+1, lambda
 		def invert_poisson(ip):
 			u, lamt = ip[0], ip[1]
 			init = ( K.constant(0), tf.reshape(tf.math.igammac(K.constant(0)+1,lamt),[]) )
@@ -252,45 +257,22 @@ class FAE():
 			b = lambda kk, pp: (tf.add(kk, 1) , tf.math.igammac(kk+1,lamt))
 			r1 = tf.while_loop(c, b, init)#,shape_invariants=[k.get_shape(), pp.get_shape()])
 			return r1[0]
-		u = K.constant(0.84)#np.random.uniform(0,1,1))#batch_size))
-		Ct = keras.layers.Lambda(invert_poisson)([u,lamt])	
+		#u = K.constant(V_input)#np.random.uniform(0,1,1))#batch_size))
+		#Ct = keras.layers.Lambda(invert_poisson)([V_input,lamt])	
 
 
 		# def dg(ip):
 		# 	mu1 = ip[0]
 		# 	z2 = ip[1]
 		# 	mu2=K.repeat_elements(mu1,self.dim,1) #m=10 for 10 dim data
-		# 	return mu2 + K.pow(mu2,3/2)*z2
-			
-		# x_hat = keras.layers.Lambda(dg)([mu,z_input])
-				
-		decoder2 = Model(inputs=[lam,L_input,V_input], outputs=Ct)
+		
+		decoder2 = Model(inputs=[lam,Lt,V_input], outputs=lamt)
 		
 		decoder2.summary()
-		
-		# model = Sequential()
 
-		# model.add(Dense(128 * 7 * 7, activation="relu", input_dim=self.latent_dim))
-
-		# model.summary()
-
-		# noise = Input(shape=(self.latent_dim,))
-		# img = model(noise)
 
 		return decoder2
 
-	# def build_discriminator(self):
-
-		# model = Sequential()
-
-		# model.add(Conv2D(32, kernel_size=3, strides=2, input_shape=self.img_shape, padding="same"))
-
-		# model.summary()
-
-		# img = Input(shape=self.img_shape)
-		# validity = model(img)
-
-		# return Model(img, validity)
 	
 	def load_data_model1(self):
 		m = self.dim

@@ -80,9 +80,9 @@ with sess.as_default():
     tt=(K.sign(U-Ft)+tf.ones([batch_size, 5,2*T+1]))/2
     tt=K.sum(tt,axis=2)
     # tt=K.constant(3)
-    # L0=K.constant(60) # initial length of sequence
-    # b0=K.constant(5) # number of blocks (tandems)
-    # Lt = tt*b0+L0
+    L0=K.constant(60) # initial length of sequence
+    b0=K.constant(5) # number of blocks (tandems)
+    Lt = tt*b0+L0
     # lam = K.constant(np.random.uniform(0,0.005,batch_size))#0.005 
     # lamt = lam*(L0+Lt)/2
     # lamt = K.mean(lamt)
