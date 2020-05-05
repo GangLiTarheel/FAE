@@ -83,20 +83,21 @@ with sess.as_default():
     L0=K.constant(60) # initial length of sequence
     b0=K.constant(5) # number of blocks (tandems)
     Lt = tt*b0+L0
-    # lam = K.constant(np.random.uniform(0,0.005,batch_size))#0.005 
-    # lamt = lam*(L0+Lt)/2
-    # lamt = K.mean(lamt)
+
+    lam = K.constant(0.005)#np.random.uniform(0,0.005,batch_size))#0.005 
+    lamt = lam*(L0+Lt)/2
+    lamt = K.mean(lamt)
     # #samples = tf.random.poisson(lamt,[1])#[0.5, 1.5, 2.5], [1])
     # test = tf.math.igammac(K.constant([1,2,3]),lamt) # k+1, lambda
-    # def invert_poisson(ip):
-    #     u, lamt = ip[0], ip[1]
-    #     init = ( K.constant(0), tf.reshape(tf.math.igammac(K.constant(0)+1,lamt),[]) )
-    #     c = lambda kk, pp: tf.greater(u, pp)
-    #     b = lambda kk, pp: (tf.add(kk, 1) , tf.math.igammac(kk+1,lamt))
-    #     r1 = tf.while_loop(c, b, init)#,shape_invariants=[k.get_shape(), pp.get_shape()])
-    #     return r1[0]
-    # u = K.constant(0.84)#np.random.uniform(0,1,1))#batch_size))
-    # k = keras.layers.Lambda(invert_poisson)([u,lamt])
+    def invert_poisson(ip):
+        u, lamt = ip[0], ip[1]
+        init = ( K.constant(0), tf.reshape(tf.math.igammac(K.constant(0)+1,lamt),[]) )
+        c = lambda kk, pp: tf.greater(u, pp)
+        b = lambda kk, pp: (tf.add(kk, 1) , tf.math.igammac(kk+1,lamt))
+        r1 = tf.while_loop(c, b, init)#,shape_invariants=[k.get_shape(), pp.get_shape()])
+        return r1[0]
+    u = K.constant(0.84)#np.random.uniform(0,1,1))#batch_size))
+    k = keras.layers.Lambda(invert_poisson)([u,lamt])
 
     # N=7
     # for k in range(7):
@@ -110,7 +111,7 @@ with sess.as_default():
     #         var=var+1
     #         pp=pp+rv.pmf(var)
     #     return var
-    tensor = tt
+    tensor = lamt
     print_op = tf.print(tensor)
     with tf.control_dependencies([print_op]):
         out = tf.add(tensor, tensor)

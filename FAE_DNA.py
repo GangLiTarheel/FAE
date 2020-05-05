@@ -247,18 +247,24 @@ class FAE():
 			return tlamt
 		lamt = keras.layers.Lambda(lam_para)(Lt)
 
+		poi0 = keras.layers.Lambda(lambda x: tf.exp(x))(lamt)
+		poi1 = keras.layers.Lambda(lambda x: tf.exp(x)*x)(lamt)
+		poi2 = keras.layers.Lambda(lambda x: tf.exp(x)*x**2/2)(lamt)
+		poi3 = keras.layers.Lambda(lambda x: tf.exp(x)*x**3/6)(lamt)
+		poi4 = keras.layers.Lambda(lambda x: tf.exp(x)*x**4/24)(lamt)
+		poi5 = keras.layers.Lambda(lambda x: tf.exp(x)*x**5/120)(lamt)
 
-		#samples = tf.random.poisson(lamt,[1])#[0.5, 1.5, 2.5], [1])
-		#test = tf.math.igammac(K.constant([1,2,3]),lamt) # k+1, lambda
-		def invert_poisson(ip):
-			u, lamt = ip[0], ip[1]
-			init = ( K.constant(0), tf.reshape(tf.math.igammac(K.constant(0)+1,lamt),[]) )
-			c = lambda kk, pp: tf.greater(u, pp)
-			b = lambda kk, pp: (tf.add(kk, 1) , tf.math.igammac(kk+1,lamt))
-			r1 = tf.while_loop(c, b, init)#,shape_invariants=[k.get_shape(), pp.get_shape()])
-			return r1[0]
-		#u = K.constant(V_input)#np.random.uniform(0,1,1))#batch_size))
-		#Ct = keras.layers.Lambda(invert_poisson)([V_input,lamt])	
+		# #samples = tf.random.poisson(lamt,[1])#[0.5, 1.5, 2.5], [1])
+		# #test = tf.math.igammac(K.constant([1,2,3]),lamt) # k+1, lambda
+		# def invert_poisson(ip):
+		# 	u, lamt = ip[0], ip[1]
+		# 	init = ( K.constant(0), tf.reshape(tf.math.igammac(K.constant(0)+1,lamt),[]) )
+		# 	c = lambda kk, pp: tf.greater(u, pp)
+		# 	b = lambda kk, pp: (tf.add(kk, 1) , tf.math.igammac(kk+1,lamt))
+		# 	r1 = tf.while_loop(c, b, init) #,shape_invariants=[k.get_shape(), pp.get_shape()])
+		# 	return r1[0]
+		# #u = K.constant(V_input)#np.random.uniform(0,1,1))#batch_size))
+		# Ct = keras.layers.Lambda(invert_poisson)([V_input,lamt])	
 
 
 		# def dg(ip):
