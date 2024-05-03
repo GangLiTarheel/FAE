@@ -1,0 +1,350 @@
+---
+title: "Laplace_LS_model"
+author: "Gang"
+date: "7/2/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Import the required packges
+
+```{r}
+library(ggplot2)
+library(cowplot)
+library(rmutil)
+library(reshape2)
+library(ggplot2)
+library(gridExtra)
+setwd("~/FAE/Aug2019/code/Laplace")
+```
+
+## Simulate Data
+
+
+```{r }
+theta = 0
+sigma = 1
+m=100
+set.seed(7)
+z = rlaplace(n=m, m=0, s=1) #rt(n=m, df=3) #
+x = theta + sigma * z
+```
+
+## Fiducial Estimator
+```{r }
+n=100000
+sample_sigma = rep(0,n)
+sample_theta = rep(0,n)
+
+i=20200701
+
+sample_gfi <- function(i){
+  set.seed(i)
+  z_star = rlaplace(n=m, m=0, s=1) #rt(n=m, df=5) #
+  #sigma_star = mean(abs( (sort(x)-mean(x)) / (sort(z_star)-mean(z_star)) ))
+  #print(abs( sum(  (z-mean(z)) * (x-mean(x))) ) /sum( (z-mean(z))^2 ))
+  #sigma_star =sum( abs( ( sort(z_star)-mean(z_star)) * (sort(x)-mean(x))) ) /sum( (z_star-mean(z_star))^2 )  
+  #sigma_star =abs( sum(  ( sort(z_star)-mean(z_star)) * (sort(x)-mean(x)) ) ) /sum( (z_star-mean(z_star))^2 )  
+  sigma_star =abs( sum(  ( sort(z_star)) * (sort(x)-mean(x)) ) ) /sum( (z_star-mean(z_star))* z_star )
+  theta_star = mean(x) -sigma_star*mean(z_star)
+  mzr_star = sqrt(sum( (sort(x)- (theta_star + sigma_star * sort(z_star) ) )  ^2))
+  return (c(theta_star,sigma_star,mzr_star))
+}
+
+sample=lapply(1:n,sample_gfi)
+samples = matrix(unlist(sample),nrow=n,ncol=3, byrow=T)
+colnames(samples) <- c("theta","sigma","l2_norm")
+
+summary(samples)
+
+hist(samples[,3])
+  
+```
+
+## Approximate Fiducial Estimation
+
+```{r}
+threshold = c(8,2) # 14, 5 for student t
+n_c=length(threshold)
+
+
+
+
+sample_AFC <- function(tt){
+  n_sim = 200
+  temp_index = which(samples[,3]<tt)
+  set.seed(tt*100)
+  print(length(temp_index))
+  if (length(temp_index)<n_sim) print("Error!")
+  ind_temp = sample(temp_index,n_sim)
+  return(ind_temp)
+}
+index_list = lapply(threshold, sample_AFC )
+#index[[1]] = which(samples[,3]<7.44)
+
+set.seed(1)
+
+## confidence curves
+
+# for sigma
+x_sigma = seq(0.8,1.4,0.01)
+cc_sigma = matrix(0,nrow = length(x_sigma),ncol = n_c)
+
+cdf_temp <- ecdf(samples[index_list[[1]],2])
+cc_sigma[,1] = 2 * abs(cdf_temp(x_sigma) - 0.5 )
+cdf_temp <- ecdf(samples[index_list[[2]],2])
+cc_sigma[,2] = 2 * abs(cdf_temp(x_sigma) - 0.5 )
+# cdf_temp <- ecdf(samples[index_list[[3]],2])
+# cc_sigma[,3] = 2 * abs(cdf_temp(x_sigma) - 0.5 )
+
+df_cc_sigma <- data.frame(x=x_sigma,cc_sigma)
+names(df_cc_sigma) <-c("sigma","Without_AFC","With_AFC")# "AFC1","AFC2","AFC3")
+df_l_cc_sigma = melt(df_cc_sigma, id=c("sigma"))
+
+p_cc_sigma <- ggplot(df_l_cc_sigma, aes(x=sigma,y=value,colour=variable)) + 
+  geom_line() + 
+  scale_color_manual(name = "Method:",values=c("blue","orange","brown","cyan"), labels = c("Without_AFC","With_AFC")) + #"AFC1","AFC2","AFC3"
+  labs(x=expression(sigma), y="Confidence Level") + 
+  theme_classic() + 
+  theme(text = element_text(size = 20),legend.position="right")  + 
+  geom_vline(xintercept=sigma, color="red") + 
+  geom_hline(yintercept=0.90, color="yellow") + 
+  scale_y_continuous(breaks=seq(0,1,0.2)) +
+  scale_x_continuous(breaks=seq(0.8,1.4,0.2))
+
+#p_cc_sigma 
+
+###########
+# for theta
+x_theta = seq(-0.5,0.6,0.01)
+cc_theta = matrix(0,nrow = length(x_theta),ncol = n_c)
+
+cdf_temp <- ecdf(samples[index_list[[1]],1])
+cc_theta[,1] = 2 * abs(cdf_temp(x_theta) - 0.5 )
+cdf_temp <- ecdf(samples[index_list[[2]],1])
+cc_theta[,2] = 2 * abs(cdf_temp(x_theta) - 0.5 )
+# cdf_temp <- ecdf(samples[index_list[[3]],1])
+# cc_theta[,3] = 2 * abs(cdf_temp(x_theta) - 0.5 )
+# cdf_temp <- ecdf(samples[index_list[[4]],1])
+# cc_theta[,4] = 2 * abs(cdf_temp(x_theta) - 0.5 )
+
+df_cc_theta <- data.frame(x=x_theta,cc_theta)
+names(df_cc_theta) <-c("theta","Without_AFC","With_AFC")#"AFC1","AFC2","AFC3")
+df_l_cc_theta = melt(df_cc_theta, id=c("theta"))
+
+p_cc_theta <- ggplot(df_l_cc_theta, aes(x=theta,y=value,colour=variable)) + 
+  geom_line() + 
+  scale_color_manual(name = "Method:",values=c("blue","orange","brown","cyan"), labels = c("Without_AFC","With_AFC")) + #"AFC1","AFC2","AFC3"
+  labs(x=expression(theta), y="Confidence Level") + 
+  theme_classic() + 
+  theme(text = element_text(size = 20),legend.position="right")  + 
+  geom_vline(xintercept=theta, color="red") + 
+  geom_hline(yintercept=0.90, color="yellow") + 
+  scale_y_continuous(breaks=seq(0,1,0.2)) +
+  scale_x_continuous(breaks=seq(-0.5,0.5,0.3))
+
+
+g_legend<-function(a.gplot){
+  tmp <- ggplot_gtable(ggplot_build(a.gplot))
+  leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
+  legend <- tmp$grobs[[leg]]
+  return(legend)}
+
+
+mylegend<-g_legend(p_cc_sigma)
+pdf("Laplace-CC.pdf",width = 12,height = 4)
+grid.arrange(arrangeGrob(p_cc_theta + theme(legend.position="none"),
+                         p_cc_sigma + theme(legend.position="none"),
+                         mylegend,
+                         nrow=1,widths = c(4,4,2)))
+dev.off()
+
+print(median(samples[,1]-sigma*mean(z)))
+print(sigma*mean(z))
+print(mean(x))
+
+```
+
+## Table: repeat simulations (200 times) 
+```{r}
+# fixed theta = 0 ; sigma =1 ; m =100;
+
+n_rep = 1000
+
+z_dat = matrix(0,n_rep,m)
+x_dat = matrix(0,n_rep,m)
+for (i in 1:n_rep){
+  set.seed(i)
+  z = rlaplace(n=m, m=0, s=1) #rt(n=m, df=3) #
+  x = theta + sigma * z
+  z_dat[i,] = z
+  x_dat[i,] = x
+}
+
+#theta_dat = rep(0,n_rep,2)
+#sigma_dat = rep(0,n_rep,2)
+alpha = 0.9
+
+
+```
+
+## without AFC
+```{r}
+
+# sample_gfi <- function(i){
+#   set.seed(i)
+#   z_star = rlaplace(n=m, m=0, s=1) #rt(n=m, df=5) #
+#   sigma_star =abs( sum(  ( sort(z_star)) * (sort(x)-mean(x)) ) ) /sum( (z_star-mean(z_star))* z_star )
+#   theta_star = mean(x) -sigma_star*mean(z_star)
+#   #mzr_star = sqrt(sum( (sort(x)- (theta_star + sigma_star * sort(z_star) ) )  ^2))
+#   return (c(theta_star,sigma_star)) #,mzr_star))
+# }
+# 
+# sample1=lapply(1:1000,sample_gfi)
+# samples1 = matrix(unlist(sample1),nrow=1000,ncol=2, byrow=T)
+# #colnames(samples1) <- c("theta","sigma")#,"l2_norm")
+# 
+# #cdf_temp <- ecdf(samples1[,1])
+# mean(samples1[,1])
+# median(samples1[,1])
+e_cdf <- 1:1000 / 1000
+alpha=0.9
+lbd_ind=which(e_cdf >= (1-alpha)/2)[1]
+ubd_ind=which(e_cdf >= (1+alpha)/2)[1]
+coverage1=0
+
+# lbd <- sort(samples1[,1])[lbd_ind]
+# ubd <- sort(samples1[,1])[ubd_ind]
+# if(median(samples1[,1])<ubd & median(samples1[,1]) > lbd){
+#   coverage1=coverage1+1
+# }
+
+sample_gfi_rep<-function(j){
+  x=x_dat[j,]
+  z=z_dat[j,]
+  sample_gfi <- function(i){
+  set.seed(i)
+  z_star = rlaplace(n=m, m=0, s=1) #rt(n=m, df=5) #
+  sigma_star =abs( sum(  ( sort(z_star)) * (sort(x)-mean(x)) ) ) /sum( (z_star-mean(z_star))* z_star )
+  theta_star = mean(x) -sigma_star*mean(z_star)
+  #mzr_star = sqrt(sum( (sort(x)- (theta_star + sigma_star * sort(z_star) ) )  ^2))
+  return (c(theta_star,sigma_star)) #,mzr_star))
+  }
+  sample1=lapply(1:1000 * j ,sample_gfi)
+  samples1 = matrix(unlist(sample1),nrow=1000,ncol=2, byrow=T)
+  coverage1=0
+  lbd <- sort(samples1[,1])[lbd_ind]
+  ubd <- sort(samples1[,1])[ubd_ind]
+  CI1 <- ubd - lbd
+  if(theta<ubd & theta > lbd){
+  coverage1=1}
+  coverage2=0
+  lbd <- sort(samples1[,2])[lbd_ind]
+  ubd <- sort(samples1[,2])[ubd_ind]
+  CI2 <- ubd - lbd
+  if(sigma<ubd & sigma > lbd){
+  coverage2=1}
+  return (c(median(samples1[,1]),median(samples1[,2]),mean(samples1[,1]),mean(samples1[,2]),coverage1,coverage2,CI1,CI2))
+}
+
+LS_sample1=lapply(1:200,sample_gfi_rep)
+LS_samples1 = matrix(unlist(LS_sample1),nrow=200,ncol=8, byrow=T)
+
+summary(LS_samples1)
+
+```
+
+## without AFC
+```{r}
+
+# sample_afc_gfi <- function(i){
+#   set.seed(i)
+#   z_star = rlaplace(n=m, m=0, s=1) #rt(n=m, df=5) #
+#   sigma_star =abs( sum(  ( sort(z_star)) * (sort(x)-mean(x)) ) ) /sum( (z_star-mean(z_star))* z_star )
+#   theta_star = mean(x) -sigma_star*mean(z_star)
+#   mzr_star = sqrt(sum( (sort(x)- (theta_star + sigma_star * sort(z_star) ) )  ^2))
+#   while(mzr_star>2){
+#     i=i+n_rep
+#     set.seed(i)
+#     z_star = rlaplace(n=m, m=0, s=1) #rt(n=m, df=5) #
+#     sigma_star =abs( sum(  ( sort(z_star)) * (sort(x)-mean(x)) ) ) /sum( (z_star-mean(z_star))* z_star )
+#     theta_star = mean(x) -sigma_star*mean(z_star)
+#     mzr_star = sqrt(sum( (sort(x)- (theta_star + sigma_star * sort(z_star) ) )  ^2))
+#   }
+#   return (c(theta_star,sigma_star)) #,mzr_star))
+# }
+# 
+# sample2=lapply(1:1000,sample_afc_gfi)
+# samples2 = matrix(unlist(sample2),nrow=1000,ncol=2, byrow=T)
+# #colnames(samples2) <- c("theta","sigma")#,"l2_norm")
+
+
+
+sample_gfi_rep<-function(j){
+  x=x_dat[j,]
+  z=z_dat[j,]
+  sample_afc_gfi <- function(i){
+  set.seed(i)
+  z_star = rlaplace(n=m, m=0, s=1) #rt(n=m, df=5) #
+  sigma_star =abs( sum(  ( sort(z_star)) * (sort(x)-mean(x)) ) ) /sum( (z_star-mean(z_star))* z_star )
+  theta_star = mean(x) -sigma_star*mean(z_star)
+  mzr_star = sqrt(sum( (sort(x)- (theta_star + sigma_star * sort(z_star) ) )  ^2))
+  while(mzr_star>3){
+    i=i+n_rep
+    set.seed(i)
+    z_star = rlaplace(n=m, m=0, s=1) #rt(n=m, df=5) #
+    sigma_star =abs( sum(  ( sort(z_star)) * (sort(x)-mean(x)) ) ) /sum( (z_star-mean(z_star))* z_star )
+    theta_star = mean(x) -sigma_star*mean(z_star)
+    mzr_star = sqrt(sum( (sort(x)- (theta_star + sigma_star * sort(z_star) ) )  ^2))
+  }
+  return (c(theta_star,sigma_star)) #,mzr_star))
+  }
+  sample2=lapply(1:1000 * j,sample_afc_gfi)
+  samples2 = matrix(unlist(sample2),nrow=1000,ncol=2, byrow=T)
+  # sample_gfi <- function(i){
+  # set.seed(i)
+  # z_star = rlaplace(n=m, m=0, s=1) #rt(n=m, df=5) #
+  # sigma_star =abs( sum(  ( sort(z_star)) * (sort(x)-mean(x)) ) ) /sum( (z_star-mean(z_star))* z_star )
+  # theta_star = mean(x) -sigma_star*mean(z_star)
+  # #mzr_star = sqrt(sum( (sort(x)- (theta_star + sigma_star * sort(z_star) ) )  ^2))
+  # return (c(theta_star,sigma_star)) #,mzr_star))
+  # }
+  # sample1=lapply(1:1000 * j ,sample_gfi)
+  # samples1 = matrix(unlist(sample1),nrow=1000,ncol=2, byrow=T)
+  coverage1=0
+  lbd <- sort(samples2[,1])[lbd_ind]
+  ubd <- sort(samples2[,1])[ubd_ind]
+  CI1 <- ubd - lbd
+  if(theta<ubd & theta > lbd){
+  coverage1=1}
+  coverage2=0
+  lbd <- sort(samples2[,2])[lbd_ind]
+  ubd <- sort(samples2[,2])[ubd_ind]
+  CI2 <- ubd - lbd
+  if(sigma<ubd & sigma > lbd){
+  coverage2=1}
+  return (c(median(samples2[,1]),median(samples2[,2]),mean(samples2[,1]),mean(samples2[,2]),coverage1,coverage2,CI1,CI2))
+}
+
+LS_sample2=lapply(1:200,sample_gfi_rep)
+LS_samples2 = matrix(unlist(LS_sample2),nrow=200,ncol=8, byrow=T)
+
+summary(LS_samples2)
+
+
+```
+
+```{r}
+colnames(LS_samples1)<-c("Median1","Median2","Mean1","Mean2","Coverage1","Coverage2","CI1","CI2")
+colnames(LS_samples2)<-c("Median1","Median2","Mean1","Mean2","Coverage1","Coverage2","CI1","CI2")
+#summary(LS_samples1)
+#summary(LS_samples2)
+apply(LS_samples1, 2, mean)
+apply(LS_samples2, 2, mean)
+#save(LS_samples1,LS_samples2,file = "LaplaceTable.RData")
+```
+
+
