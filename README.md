@@ -27,4 +27,4 @@ Li, G, Hannig, J. Deep fiducial inference. Stat. 2020; 9e308. https://doi.org/10
 
 https://onlinelibrary.wiley.com/doi/abs/10.1002/sta4.308
 
-Contact: Gang Li [franklee@live.unc.edu].
+Contact: Gang Li [gangliuw@uw.edu].
